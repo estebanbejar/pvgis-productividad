@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+title: PVGIS Productividad – MATLAB Tools
+authors:
+  - family-names: Sánchez
+    given-names: Esteban
+version: 0.1.0
+date-released: 2025-09-18
+url: https://github.com/your-user/pvgis-productividad
+preferred-citation:
+  type: software
+  authors:
+    - family-names: Sánchez
+      given-names: Esteban
+  title: PVGIS Productividad – MATLAB Tools
+  year: 2025
