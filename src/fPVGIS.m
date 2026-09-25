@@ -23,8 +23,8 @@ for inclinacion=0:5:90
 end
 i=1;
 % Valores máximos
-max_pro=max(productividad,[],'all');
-max_irr=max(irradiacion,[],'all');
+max_pro=max(productividad,[],'all','omitnan');
+max_irr=max(irradiacion,[],'all','omitnan');
 
 % Guardar datos
 % save (['PVGIS_',localidad,'_',num2str(latitud),'_',num2str(longitud),'.mat'],'localidad','productividad','irradiacion','max_pro','max_irr','perd_temp','perd_esp','perd_aoi');
@@ -57,7 +57,17 @@ url = sprintf('%s?lat=%f&lon=%f&peakpower=1&loss=14&angle=%f&aspect=%f&outputfor
 %disp(['Solicitando datos a: ', url]);
 
 % Realizar la solicitud a la API
-datos = webread(url);
+try
+    datos = webread(url);
+catch ME
+    warning('No se pudo leer la API PVGIS: %s', ME.message);
+    productividad = NaN;
+    irradiacion = NaN;
+    perd_aoi = NaN;
+    perd_esp = NaN;
+    perd_temp = NaN;
+    return
+end
 
 if isfield(datos, 'outputs')
     productividad=datos.outputs.totals.fixed.E_y;

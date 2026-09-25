@@ -18,7 +18,7 @@ Herramientas en MATLAB para:
    └─ demo.m          # Ejemplo mínimo de uso
 ```
 
-> Nota: **fPVGIS.m** realiza ~684 llamadas a la API (tiempo de ejecución de varios minutos) para rellenar la malla completa de ángulos.
+> Nota: **fPVGIS.m** realiza 684 llamadas a la API (tiempo de ejecución de varios minutos) para rellenar la malla completa de ángulos. Si una consulta falla, muestra un aviso y guarda `NaN` en las cinco matrices para esa combinación de inclinación y acimut.
 
 ## Requisitos
 
@@ -57,7 +57,7 @@ fpolar3(data, 'Etiqueta del radio', 'Localidad', 'Lat', 'Lon');
   - Salida (en fichero `.mat`): matrices `productividad`, `irradiacion`, `perd_aoi`, `perd_esp`, `perd_temp`; escalares `max_pro`, `max_irr`; cadena `localidad`.
   - Barridos:
     - Inclinación: `0:5:90` (19 valores).
-    - Acimut: `-170:10:180` (36 o 37 valores según implementación).
+    - Acimut: `-170:10:180` (36 valores).
   - Internamente llama a una función auxiliar que usa `webread` hacia la API de PVGIS.
 
 - **`src/fgraf_polar.m`**
@@ -67,7 +67,8 @@ fpolar3(data, 'Etiqueta del radio', 'Localidad', 'Lat', 'Lon');
     - Gráfico polar de `productividad` normalizada (%).
 
 - **`src/fpolar3.m`**
-  - Función de utilidad para representar matrices en coordenadas polares con etiquetas de elevación (0–90°) y ticks de acimut.
+  - Función de utilidad para representar matrices en coordenadas polares con 20 intervalos de color, ignorando valores `NaN` al calcular sus límites.
+  - Muestra etiquetas de elevación entre 0° y 90° y etiquetas de acimut cada 15°.
 
 ## Buenas prácticas para datos
 

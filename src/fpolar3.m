@@ -28,9 +28,15 @@ theta = deg2rad(azimut_rot_deg);
 
 %% Graficar el contorno
 figure;
-contourf(X, Y, data_closed, 'LineStyle', 'none');  % Dibujar el contorno rellenado
-colormap(parula);                                    % Usar 'parula'
-caxis([min(data_closed(:)) max(data_closed(:))]);    % Ajustar la escala de colores
+%contourf(X, Y, data_closed, 'LineStyle', 'none');  % Dibujar el contorno rellenado
+%colormap(parula);                                    % Usar 'parula'
+%caxis([min(data_closed(:)) max(data_closed(:))]);    % Ajustar la escala de colores
+vMin = min(data_closed(:), [], 'omitnan'); % Cálculo del rango
+vMax = max(data_closed(:), [], 'omitnan');
+niveles = linspace(vMin, vMax, 21);   % pasos del 5% del rango
+contourf(X, Y, data_closed, niveles, 'LineStyle', 'none');
+colormap(parula);
+caxis([vMin vMax]);
 cb = colorbar;
 cb.Label.String = etiqueta;
 axis equal;                                          % Proporciones iguales
@@ -67,7 +73,7 @@ for r_val = r_ticks
 end
 
 %% Añadir etiquetas para el azimut
-azimuth_ticks = -150:30:180;
+azimuth_ticks = -150:15:180;
 for k = 1:length(azimuth_ticks)
     tick = azimuth_ticks(k);
     % Calcular el ángulo rotado: tick - 90
