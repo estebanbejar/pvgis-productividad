@@ -21,12 +21,15 @@ uilabel(header,'Text',{'Escuela Técnica Superior de Ingeniería Industrial · �
     'Cartas anuales de irradiación y producción fotovoltaica · PVGIS'}, ...
     'FontSize',18,'FontWeight','bold','FontColor',[.09 .20 .31]);
 body=uigridlayout(outer,[1 2]);body.ColumnWidth={315,'1x'};body.ColumnSpacing=14;
-ctrl=uigridlayout(body,[13 2]);ctrl.ColumnWidth={105,'1x'};ctrl.RowHeight={25,32,25,32,25,32,42,42,42,30,30,70,'1x'};ctrl.RowSpacing=6;ctrl.Padding=[4 4 4 4];
+ctrl=uigridlayout(body,[14 2]);ctrl.ColumnWidth={105,'1x'};ctrl.RowHeight={25,32,25,32,25,32,32,42,42,42,30,30,70,'1x'};ctrl.RowSpacing=6;ctrl.Padding=[4 4 4 4];
 uilabel(ctrl,'Text','Localidad');location=uieditfield(ctrl,'text','Value',nombreInicial,'Tag','locationName');
 uilabel(ctrl,'Text','Latitud (°)');lat=uieditfield(ctrl,'numeric','Value',latInicial,'Limits',[-90 90],'Tag','latitude');
 uilabel(ctrl,'Text','Longitud (°)');lon=uieditfield(ctrl,'numeric','Value',lonInicial,'Limits',[-180 180],'Tag','longitude');
 mapButton=uibutton(ctrl,'Text','Seleccionar en mapa…','Tag','selectLocation','ButtonPushedFcn',@selectLocation);mapButton.Layout.Column=[1 2];
 calcButton=uibutton(ctrl,'Text','Calcular carta PVGIS','FontWeight','bold','ButtonPushedFcn',@calculate);calcButton.Layout.Column=[1 2];
+retryButton=uibutton(ctrl,'Text','Completar datos pendientes (3 pasadas)','Enable','off', ...
+    'Tooltip','Vuelve a consultar solo las orientaciones sin datos y conserva los resultados válidos.', ...
+    'Tag','retryPVGIS','ButtonPushedFcn',@retryPending);retryButton.Layout.Column=[1 2];
 openButton=uibutton(ctrl,'Text','Abrir datos .mat','ButtonPushedFcn',@openMat);openButton.Layout.Column=[1 2];
 saveButton=uibutton(ctrl,'Text','Guardar datos .mat','Enable','off','ButtonPushedFcn',@saveMat);saveButton.Layout.Column=[1 2];
 uilabel(ctrl,'Text','Magnitud');metric=uidropdown(ctrl,'Items',{'Irradiación anual','Producción anual'}, ...
@@ -60,6 +63,7 @@ if ~isempty(archivoInicial),loadMat(archivoInicial);end
         if ~isempty(result)
             status.Text='Se han editado los datos de ubicación. La carta mostrada corresponde a la consulta anterior.';
         end
+        updateRetryButton();
     end
     function calculate(varargin)
         if busy,return;end
@@ -68,10 +72,14 @@ if ~isempty(archivoInicial),loadMat(archivoInicial);end
             'Value',0,'Cancelable','on');
         try
             fresh=pv_productividad_calcular(location.Value,lat.Value,lon.Value,@updateProgress);
-            result=fresh;saveButton.Enable='on';
-            status.Text=sprintf('Consulta completada: %d de %d puntos válidos. Puede guardar la matriz en un archivo .mat.', ...
-                nnz(isfinite(result.productividad)&isfinite(result.irradiacion)),numel(result.productividad));
-            redraw();
+            result=fresh;
+            if validCount()>0
+                saveButton.Enable='on';redraw();
+            else
+                saveButton.Enable='off';cla(cartAx);cla(polarAx);
+                summary.Text='PVGIS todavía no ha devuelto puntos válidos para esta ubicación.';
+            end
+            updateResultStatus('Consulta');
         catch err
             if strcmp(err.identifier,'pv:cancelled')
                 status.Text='Consulta cancelada. Los resultados anteriores se conservan.';
@@ -82,9 +90,36 @@ if ~isempty(archivoInicial),loadMat(archivoInicial);end
         end
         finishCalculate();
     end
+    function retryPending(varargin)
+        if busy||isempty(result)||~sameLocation()||validCount()==numel(result.productividad),return;end
+        busy=true;setButtons('off');status.Text='Reintentando únicamente las orientaciones pendientes…';drawnow;
+        dlg=uiprogressdlg(fig,'Title','Completar carta PVGIS','Message','Preparando reintentos…', ...
+            'Indeterminate','off','Value',0,'Cancelable','on');
+        try
+            fresh=pv_productividad_calcular(location.Value,lat.Value,lon.Value,@updateProgress,result,3);
+            if isvalid(dlg),dlg.Value=1;dlg.Message='Pasadas completadas';drawnow;end
+            result=fresh;
+            if validCount()>0
+                saveButton.Enable='on';redraw();
+            else
+                saveButton.Enable='off';cla(cartAx);cla(polarAx);
+                summary.Text='PVGIS todavía no ha devuelto puntos válidos para esta ubicación.';
+            end
+            updateResultStatus('Reintento');
+        catch err
+            if strcmp(err.identifier,'pv:cancelled')
+                status.Text='Reintentos cancelados. Se conservan los datos anteriores.';
+            else
+                status.Text=['No se pudieron completar los reintentos: ' err.message];
+            end
+            if ~strcmp(err.identifier,'pv:cancelled')&&isvalid(fig),uialert(fig,err.message,'Consulta PVGIS');end
+        end
+        finishCalculate();
+    end
     function keepGoing=updateProgress(done,total,failures)
         if ~isvalid(dlg),keepGoing=false;return;end
-        dlg.Value=done/total;dlg.Message=sprintf('Consulta %d de %d · errores de consulta: %d',done,total,failures);
+        if total>0,dlg.Value=min(1,done/total);else,dlg.Value=1;end
+        dlg.Message=sprintf('Solicitud %d de hasta %d · fallos acumulados: %d',done,total,failures);
         drawnow limitrate;keepGoing=~dlg.CancelRequested;
     end
     function finishCalculate()
@@ -93,7 +128,39 @@ if ~isempty(archivoInicial),loadMat(archivoInicial);end
     end
     function setButtons(state)
         calcButton.Enable=state;openButton.Enable=state;mapButton.Enable=state;
-        if ~isempty(result),saveButton.Enable=state;end
+        if strcmp(state,'off')
+            saveButton.Enable='off';retryButton.Enable='off';
+        else
+            saveButton.Enable=onOff(validCount()>0);
+            updateRetryButton();
+        end
+    end
+    function updateRetryButton()
+        retryButton.Enable='off';
+        if ~busy&&~isempty(result)&&sameLocation()&&validCount()<numel(result.productividad)
+            retryButton.Enable='on';
+        end
+    end
+    function tf=sameLocation()
+        tf=~isempty(result)&&isfield(result,'latitud')&&isfield(result,'longitud')&& ...
+            isequal(result.latitud,lat.Value)&&isequal(result.longitud,lon.Value)&& ...
+            isfield(result,'localidad')&&strcmp(strtrim(result.localidad),strtrim(location.Value));
+    end
+    function n=validCount()
+        if isempty(result),n=0;else,n=nnz(isfinite(result.productividad)&isfinite(result.irradiacion));end
+    end
+    function updateResultStatus(action)
+        missing=numel(result.productividad)-validCount();
+        if missing==0
+            status.Text=sprintf('%s completado: %d de %d puntos válidos. Puede guardar la matriz en un archivo .mat.', ...
+                action,validCount(),numel(result.productividad));
+        else
+            status.Text=sprintf('%s: %d de %d puntos válidos; quedan %d pendientes. Pulse «Completar datos pendientes» para hacer hasta 3 pasadas más.', ...
+                action,validCount(),numel(result.productividad),missing);
+        end
+    end
+    function value=onOff(tf)
+        if tf,value='on';else,value='off';end
     end
     function openMat(varargin)
         [file,folder]=uigetfile({'*.mat','Archivos MATLAB (*.mat)'},'Abrir carta guardada');
@@ -104,7 +171,7 @@ if ~isempty(archivoInicial),loadMat(archivoInicial);end
         try
             s=load(file);fresh=validarDatos(s,file);
             result=fresh;location.Value=fresh.localidad;lat.Value=fresh.latitud;lon.Value=fresh.longitud;
-            saveButton.Enable='on';status.Text=['Datos cargados: ' file];redraw();
+            saveButton.Enable=onOff(validCount()>0);status.Text=['Datos cargados: ' file];redraw();updateRetryButton();
         catch err
             uialert(fig,err.message,'Archivo no válido');
         end
